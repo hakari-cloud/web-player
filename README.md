@@ -174,9 +174,9 @@ of passing the prop on every instance.
 <HakariPlayer src={signedUrl} controls={false} />   // hide all controls
 ```
 
-`react` and `react-dom` are declared as **optional peer dependencies**.
-The vanilla `@hakari/web-player` import has zero React payload — only
-customers who `import` from `@hakari/web-player/react` pay for the wrapper.
+**Plain JS / no React?** Just install the package — `import { HakariPlayer } from '@hakari/web-player'` works on its own. The bundle your visitors download stays React-free.
+
+**Using React?** Install `react` and `react-dom` in your app alongside `@hakari/web-player`. We don't bundle our own copy — we use whichever version your app already has, so you never end up with two Reacts in the same page.
 
 ## Browser support
 

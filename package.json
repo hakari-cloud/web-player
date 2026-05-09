@@ -1,6 +1,6 @@
 {
   "name": "@hakari/web-player",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Embed-friendly HLS / LL-HLS web player for Hakari live streams and VODs. Custom controls, sprite-thumbnail scrubbing, signed-playback aware.",
   "type": "module",
   "main": "./dist/index.cjs",

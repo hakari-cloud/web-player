@@ -188,6 +188,10 @@ export class HakariPlayer {
   destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
+    if (this.notFoundTimer) {
+      clearTimeout(this.notFoundTimer)
+      this.notFoundTimer = null
+    }
     if (this.hls) {
       try { this.hls.destroy() } catch { /* ignore */ }
       this.hls = null
@@ -262,6 +266,14 @@ export class HakariPlayer {
   // ── internal: hls.js bridge ────────────────────────────────────
 
   private onManifestParsed = (_evt: unknown, data: ManifestParsedData): void => {
+    // Successful parse — reset the retry budgets so a stream that comes
+    // up after a 404 (or briefly drops) gets fresh attempts next time.
+    this.networkRetries = 0
+    this.notFoundRetries = 0
+    if (this.notFoundTimer) {
+      clearTimeout(this.notFoundTimer)
+      this.notFoundTimer = null
+    }
     const levels = toPublicLevels(data.levels)
     this.emit('levelparsed', { levels })
     this.emit('ready', {
@@ -285,9 +297,23 @@ export class HakariPlayer {
   }
 
   // hls.js fires non-fatal errors constantly (404 on a single segment,
-  // timeout on a part fetch, etc.). We only emit on fatals — others get
+  // timeout on a part fetch, etc.). We only act on fatals — others get
   // network-retried / media-recovered transparently.
+  //
+  // Retry policy:
+  //   404 from manifest/level fetch  →  back-off retry [5s, 10s, 15s]
+  //     The source isn't there yet (live stream hasn't started, VOD
+  //     master uploaded after the dashboard first navigated, etc.).
+  //     Immediate retry burns the budget and rarely helps.
+  //   Other network errors           →  immediate retry, capped at 3
+  //     Transient socket failures, DNS blips, etc.
+  //
+  // Counters reset on successful manifest parse.
   private networkRetries = 0
+  private notFoundRetries = 0
+  private notFoundTimer: ReturnType<typeof setTimeout> | null = null
+  private static readonly NOT_FOUND_BACKOFF_MS = [5000, 10000, 15000]
+
   private onHlsError = (_evt: unknown, data: ErrorData): void => {
     // Sniff X-Deny-Reason from the response so the next fatal-error
     // payload can carry it. hls.js's typing for `response` doesn't
@@ -297,10 +323,23 @@ export class HakariPlayer {
 
     if (!data.fatal) return
 
-    if (data.type === Hls.ErrorTypes.NETWORK_ERROR && this.networkRetries < 3) {
-      this.networkRetries += 1
-      this.hls?.startLoad()
-      return
+    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+      const status = readResponseCode(data)
+      if (status === 404 && this.notFoundRetries < HakariPlayer.NOT_FOUND_BACKOFF_MS.length) {
+        const delay = HakariPlayer.NOT_FOUND_BACKOFF_MS[this.notFoundRetries] ?? 15000
+        this.notFoundRetries += 1
+        if (this.notFoundTimer) clearTimeout(this.notFoundTimer)
+        this.notFoundTimer = setTimeout(() => {
+          this.notFoundTimer = null
+          this.hls?.startLoad()
+        }, delay)
+        return
+      }
+      if (status !== 404 && this.networkRetries < 3) {
+        this.networkRetries += 1
+        this.hls?.startLoad()
+        return
+      }
     }
     if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
       try { this.hls?.recoverMediaError() } catch { /* fall through */ }
@@ -349,6 +388,21 @@ function toPublicLevels(hlsLevels: readonly HlsRuntimeLevel[]): PlayerLevel[] {
     bitrate: l.bitrate,
     index: i,
   }))
+}
+
+/** Pull HTTP status code off an hls.js error payload. Different error
+ *  shapes attach the response differently — manifest loads use
+ *  `data.response.code`, fragment loads sometimes use the same, and
+ *  network details might also expose the underlying XHR's status. */
+function readResponseCode(data: ErrorData): number | undefined {
+  const r = (data as { response?: { code?: number } }).response
+  if (r && typeof r.code === 'number') return r.code
+  const xhr = (data as { networkDetails?: XMLHttpRequest | unknown }).networkDetails
+  if (xhr && typeof (xhr as XMLHttpRequest).status === 'number') {
+    const s = (xhr as XMLHttpRequest).status
+    return s > 0 ? s : undefined
+  }
+  return undefined
 }
 
 /** Best-effort: pull `X-Deny-Reason` off the failing response if hls.js
