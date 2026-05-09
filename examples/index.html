@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>@hakari/player — example</title>
+  <style>
+    body { background: #0a0a0a; color: #e8eaf0; font-family: system-ui, sans-serif; padding: 24px; max-width: 1000px; margin: 0 auto; }
+    h1 { margin: 0 0 16px; font-size: 1.4rem; }
+    label { display: block; font-size: 0.85rem; color: #aab; margin: 12px 0 4px; }
+    input { width: 100%; padding: 8px 10px; background: #15161e; border: 1px solid #2a2c3a; border-radius: 6px; color: #e8eaf0; font-family: ui-monospace, monospace; font-size: 0.78rem; }
+    button { padding: 8px 16px; background: #3BFFD4; color: #07080D; border: 0; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    button.secondary { background: transparent; color: #3BFFD4; border: 1px solid #3BFFD4; }
+    .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    video { width: 100%; max-height: 540px; background: #000; border-radius: 8px; margin-top: 16px; }
+    pre { background: #15161e; border: 1px solid #2a2c3a; border-radius: 6px; padding: 12px; font-size: 11px; white-space: pre-wrap; max-height: 280px; overflow: auto; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <h1>@hakari/player — local dev</h1>
+
+  <label>Playback URL (signed)</label>
+  <input id="src" type="text" placeholder="https://stream.hakari.cloud/&lt;orgSlug&gt;/&lt;streamKey&gt;/llhls.m3u8?token=..." />
+
+  <div class="row">
+    <button id="load">Load &amp; play</button>
+    <button id="auto" class="secondary">Auto quality</button>
+    <button id="destroy" class="secondary">Destroy</button>
+  </div>
+  <div class="row" id="qualities"></div>
+
+  <video id="v" controls playsinline></video>
+  <pre id="log"></pre>
+
+  <script type="module">
+    import { HakariPlayer } from '../src/index.ts';
+
+    const $ = (id) => document.getElementById(id);
+    const log = (...a) => {
+      const line = a.map((x) => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ');
+      $('log').textContent += line + '\n';
+      $('log').scrollTop = $('log').scrollHeight;
+      console.log(...a);
+    };
+
+    // Persist last URL across reloads so iterating is faster.
+    const KEY = 'hakari-player-example-src';
+    $('src').value = new URLSearchParams(location.search).get('src') || localStorage.getItem(KEY) || '';
+
+    let player = null;
+
+    function renderQualities(levels, autoActive) {
+      const root = $('qualities');
+      root.innerHTML = '';
+      for (const l of levels) {
+        const btn = document.createElement('button');
+        btn.className = 'secondary';
+        btn.textContent = `${l.height}p`;
+        btn.onclick = () => player?.setQuality(l.height);
+        root.appendChild(btn);
+      }
+    }
+
+    $('load').onclick = () => {
+      const src = $('src').value.trim();
+      if (!src) return;
+      localStorage.setItem(KEY, src);
+
+      if (player) player.destroy();
+      $('log').textContent = '';
+
+      player = new HakariPlayer($('v'), { src, debug: true });
+
+      player.on('ready', (e) => { log('ready', e); renderQualities(e.levels, true); });
+      player.on('levelparsed', (e) => { renderQualities(e.levels, true); });
+      player.on('qualitychange', (e) => log('qualitychange', e));
+      player.on('playing', () => log('playing'));
+      player.on('pause', () => log('pause'));
+      player.on('ended', () => log('ended'));
+      player.on('error', (e) => log('error', e));
+
+      player.play().catch((e) => log('play() rejected', e.message));
+    };
+
+    $('auto').onclick = () => player?.setQuality('auto');
+    $('destroy').onclick = () => { if (player) { player.destroy(); player = null; log('destroyed'); } };
+  </script>
+</body>
+</html>
