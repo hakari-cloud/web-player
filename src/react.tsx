@@ -19,6 +19,7 @@ export {
   type HakariPlayerHandle,
   type HakariPlayerProps,
   type HakariPlayerControlsToggle,
+  type HakariTheme,
 } from './ui-player'
 
 import { HakariPlayer as HakariPlayerCore, type HakariPlayerOptions } from './player'

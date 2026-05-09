@@ -36,6 +36,30 @@ export interface HakariPlayerHandle {
   player: () => HakariPlayer | null
 }
 
+/** Per-instance theme overrides. Each field maps to a CSS variable on
+ *  the player root. Pass any subset; unset fields fall back to the
+ *  built-in dark defaults. For repo-wide theming, you can also write
+ *  to these variables from your own CSS targeting `.hakari-player`. */
+export interface HakariTheme {
+  /** Primary accent. Seekbar fill, scrub handle, active menu items.
+   *  Default `#3BFFD4` (Hakari cyan). */
+  accent?: string
+  /** Default text + icon color on the controls bar. Default `#fff`. */
+  text?: string
+  /** Live-indicator dot color. Default `#ff3b3b`. */
+  live?: string
+  /** Bottom-bar gradient peak — controls the darkness of the controls
+   *  background. Default `rgba(0,0,0,0.85)` (fades to transparent). */
+  overlay?: string
+  /** Quality / settings menu background. Default `rgba(20,20,28,0.95)`. */
+  menuBg?: string
+  /** Menu border color. Default `rgba(255,255,255,0.08)`. */
+  menuBorder?: string
+  /** Hover-highlight color (icon buttons + menu items).
+   *  Default `rgba(255,255,255,0.15)`. */
+  hover?: string
+}
+
 export interface HakariPlayerControlsToggle {
   /** Bottom-bar play/pause button + center-overlay button. Default true. */
   play?: boolean
@@ -66,9 +90,13 @@ export interface HakariPlayerProps
   debug?: boolean
   hlsConfig?: HakariPlayerOptions['hlsConfig']
 
-  /** CSS color used for accent (seekbar fill, scrub handle, active
-   *  menu items). Defaults to Hakari cyan `#3BFFD4`. */
+  /** Shorthand for `theme={{ accent: ... }}`. Kept for backwards compat
+   *  with the original API. If both are set, `theme.accent` wins. */
   accentColor?: string
+
+  /** Per-instance theme overrides. Any subset of the slots in
+   *  `HakariTheme`. Maps to CSS variables on the player root. */
+  theme?: HakariTheme
 
   /** Show / hide individual control elements. Pass `false` to hide all. */
   controls?: boolean | HakariPlayerControlsToggle
@@ -110,6 +138,7 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
       debug,
       hlsConfig,
       accentColor,
+      theme,
       controls,
       onReady,
       onPlaying,
@@ -283,10 +312,21 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
       className || '',
     ].filter(Boolean).join(' ')
 
-    const containerStyle: CSSProperties = useMemo(() => ({
-      ...(accentColor ? { ['--hakari-accent' as any]: accentColor } : {}),
-      ...style,
-    }), [accentColor, style])
+    const containerStyle: CSSProperties = useMemo(() => {
+      // Theme variables. `theme` slots win over the legacy `accentColor`
+      // shorthand when both are passed. Customer's `style` prop wins
+      // over everything (last spread).
+      const t: Record<string, string> = {}
+      if (accentColor) t['--hakari-accent'] = accentColor
+      if (theme?.accent)     t['--hakari-accent']      = theme.accent
+      if (theme?.text)       t['--hakari-text']        = theme.text
+      if (theme?.live)       t['--hakari-live']        = theme.live
+      if (theme?.overlay)    t['--hakari-overlay']     = theme.overlay
+      if (theme?.menuBg)     t['--hakari-menu-bg']     = theme.menuBg
+      if (theme?.menuBorder) t['--hakari-menu-border'] = theme.menuBorder
+      if (theme?.hover)      t['--hakari-hover']       = theme.hover
+      return { ...t, ...style } as CSSProperties
+    }, [accentColor, theme, style])
 
     return (
       <div

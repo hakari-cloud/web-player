@@ -138,7 +138,33 @@ ref.current?.video()                 // raw HTMLVideoElement
 ref.current?.player()                // raw HakariPlayer (vanilla)
 ```
 
-Hide individual controls with the `controls` prop:
+### Theming
+
+```tsx
+<HakariPlayer
+  src={signedUrl}
+  theme={{
+    accent: '#ff3a8c',          // seekbar fill, scrub handle, active menu
+    text: '#fff',
+    live: '#ff3b3b',
+    overlay: 'rgba(0,0,0,0.85)', // controls bar gradient peak
+    menuBg: 'rgba(20,20,28,0.95)',
+    menuBorder: 'rgba(255,255,255,0.08)',
+    hover: 'rgba(255,255,255,0.15)',
+  }}
+/>
+```
+
+Each slot maps to a CSS variable on the player root (`--hakari-accent`,
+`--hakari-text`, `--hakari-live`, `--hakari-overlay`, `--hakari-menu-bg`,
+`--hakari-menu-border`, `--hakari-hover`). Pass any subset; unset slots
+fall back to the built-in dark defaults. For repo-wide theming, write
+to those variables from your own CSS targeting `.hakari-player` instead
+of passing the prop on every instance.
+
+`accentColor="#ff3a8c"` is kept as a shorthand for `theme={{ accent: ... }}`.
+
+### Hiding individual controls
 
 ```tsx
 <HakariPlayer

@@ -13,7 +13,16 @@ export const HAKARI_PLAYER_CSS = `
   background: #000;
   overflow: hidden;
   font-family: system-ui, -apple-system, sans-serif;
+  /* Theme variables — override per-instance via the React 'theme' prop
+     (which sets these as inline styles), or globally by writing to
+     these vars from your own CSS. */
   --hakari-accent: #3BFFD4;
+  --hakari-text: #fff;
+  --hakari-live: #ff3b3b;
+  --hakari-overlay: rgba(0,0,0,0.85);
+  --hakari-menu-bg: rgba(20,20,28,0.95);
+  --hakari-menu-border: rgba(255,255,255,0.08);
+  --hakari-hover: rgba(255,255,255,0.15);
   user-select: none;
 }
 .hakari-player video {
@@ -53,7 +62,7 @@ export const HAKARI_PLAYER_CSS = `
 .hakari-controls {
   position: absolute;
   left: 0; right: 0; bottom: 0;
-  background: linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0));
+  background: linear-gradient(to top, var(--hakari-overlay), transparent);
   padding: 8px 12px 10px;
   display: flex;
   flex-direction: column;
@@ -152,7 +161,7 @@ export const HAKARI_PLAYER_CSS = `
 .hakari-btn {
   background: transparent;
   border: 0;
-  color: #fff;
+  color: var(--hakari-text);
   cursor: pointer;
   padding: 6px;
   border-radius: 4px;
@@ -163,7 +172,7 @@ export const HAKARI_PLAYER_CSS = `
   transition: background 100ms;
 }
 .hakari-btn:hover {
-  background: rgba(255,255,255,0.15);
+  background: var(--hakari-hover);
 }
 .hakari-btn svg {
   width: 20px;
@@ -171,7 +180,7 @@ export const HAKARI_PLAYER_CSS = `
   fill: currentColor;
 }
 .hakari-time {
-  color: #fff;
+  color: var(--hakari-text);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   padding: 0 4px;
@@ -188,7 +197,7 @@ export const HAKARI_PLAYER_CSS = `
   border-radius: 3px;
   font-size: 11px;
   font-weight: 600;
-  color: #fff;
+  color: var(--hakari-text);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -196,7 +205,7 @@ export const HAKARI_PLAYER_CSS = `
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ff3b3b;
+  background: var(--hakari-live);
 }
 .hakari-live.is-live .hakari-live-dot {
   animation: hakari-pulse 1.6s ease-in-out infinite;
@@ -240,8 +249,8 @@ export const HAKARI_PLAYER_CSS = `
   position: absolute;
   bottom: 36px;
   right: 0;
-  background: rgba(20,20,28,0.95);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--hakari-menu-bg);
+  border: 1px solid var(--hakari-menu-border);
   border-radius: 6px;
   padding: 4px 0;
   min-width: 120px;
@@ -252,13 +261,13 @@ export const HAKARI_PLAYER_CSS = `
   width: 100%;
   background: transparent;
   border: 0;
-  color: #fff;
+  color: var(--hakari-text);
   text-align: left;
   padding: 8px 14px;
   font-size: 12px;
   cursor: pointer;
 }
-.hakari-menu-item:hover { background: rgba(255,255,255,0.08); }
+.hakari-menu-item:hover { background: var(--hakari-hover); }
 .hakari-menu-item.active { color: var(--hakari-accent); }
 .hakari-menu-item.active::before { content: "✓ "; }
 `
