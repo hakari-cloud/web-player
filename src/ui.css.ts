@@ -212,6 +212,17 @@ export const HAKARI_PLAYER_CSS = `
   50% { opacity: 0.7; transform: scale(1.2); }
 }
 
+/* quality button — text-y so the current quality is always visible
+   (instead of hidden behind a gear icon) */
+.hakari-quality-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  letter-spacing: 0.02em;
+  min-width: 56px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* quality menu */
 .hakari-menu-wrap { position: relative; }
 .hakari-menu {
