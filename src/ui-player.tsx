@@ -393,9 +393,24 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
             {ctrl.time && !isLive && (
               <span className="hakari-time">{formatTime(currentTime)} / {formatTime(duration)}</span>
             )}
-            {ctrl.time && isLive && (
-              <span className="hakari-time" />
-            )}
+
+            {/* Live button — only for live streams. At edge: pulsing red
+                dot + LIVE label, no-op on click (already there). Behind:
+                grey dot + GO LIVE label, click jumps near bufferedEnd. */}
+            {isLive && (() => {
+              const atEdge = isAtLiveEdge(currentTime, bufferedEnd)
+              return (
+                <button
+                  className={'hakari-btn hakari-live-btn' + (atEdge ? '' : ' behind')}
+                  onClick={() => seekToLive(videoRef.current, bufferedEnd)}
+                  title={atEdge ? 'Watching live' : 'Jump to live'}
+                  aria-label={atEdge ? 'Live' : 'Jump to live'}
+                >
+                  <span className="hakari-live-dot-inline" />
+                  <span>{atEdge ? 'LIVE' : 'GO LIVE'}</span>
+                </button>
+              )
+            })()}
 
             <span className="hakari-spacer" />
 

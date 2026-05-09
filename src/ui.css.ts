@@ -221,6 +221,30 @@ export const HAKARI_PLAYER_CSS = `
   50% { opacity: 0.7; transform: scale(1.2); }
 }
 
+/* live button (in the controls bar) — explicit, discoverable. The top-
+   left badge stays for at-a-glance status; this is for action. */
+.hakari-live-btn {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  line-height: 1.5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.hakari-live-dot-inline {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--hakari-live);
+  animation: hakari-pulse 1.6s ease-in-out infinite;
+}
+.hakari-live-btn.behind .hakari-live-dot-inline {
+  background: #888;
+  animation: none;
+}
+
 /* quality button — text-y so the current quality is always visible
    (instead of hidden behind a gear icon) */
 .hakari-quality-btn {

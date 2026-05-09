@@ -101,10 +101,26 @@ export class HakariPlayer {
 
   /** Inject a hidden metadata `<track>` for the sprite-thumbnail VTT.
    *  The browser parses cues for us; `getThumbnailAt` reads from there.
-   *  No-op when `thumbnailVtt` isn't set. */
+   *  No-op when `thumbnailVtt` isn't set.
+   *
+   *  Token inheritance: when the playback `src` carries a `?token=…`
+   *  (Hakari's signed-playback bootstrap), the same token has to ride
+   *  on the thumbnail VTT request — otherwise the <track> fetch races
+   *  the master fetch and hits the edge BEFORE the Set-Cookie from the
+   *  master has landed in the browser. The signing JWT validates by
+   *  streamKey claim, not URL, so reusing the same token across child
+   *  URLs is correct (same key, same scope). If the customer already
+   *  signed thumbnailVtt themselves, we leave it alone. */
   private attachThumbnailTrack(): void {
-    const url = this.opts.thumbnailVtt
+    let url = this.opts.thumbnailVtt
     if (!url) return
+
+    const srcToken = extractTokenFromUrl(this.opts.src)
+    const vttHasToken = /[?&]token=/.test(url)
+    if (srcToken && !vttHasToken) {
+      url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(srcToken)
+    }
+
     // Avoid duplicate tracks if a caller re-uses the same video element.
     for (let i = 0; i < this.video.querySelectorAll('track').length; i++) {
       const t = this.video.querySelectorAll('track')[i] as HTMLTrackElement | undefined
@@ -388,6 +404,15 @@ function toPublicLevels(hlsLevels: readonly HlsRuntimeLevel[]): PlayerLevel[] {
     bitrate: l.bitrate,
     index: i,
   }))
+}
+
+/** Pull a `?token=…` query value out of a URL, decoded. Returns null
+ *  if the URL has no token. Used to copy auth from the playback URL
+ *  onto the thumbnail VTT URL so both ride with credentials before
+ *  the edge cookie is established. */
+function extractTokenFromUrl(url: string): string | null {
+  const m = url.match(/[?&]token=([^&#]+)/)
+  return m ? decodeURIComponent(m[1]!) : null
 }
 
 /** Pull HTTP status code off an hls.js error payload. Different error
