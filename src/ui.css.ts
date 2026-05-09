@@ -217,6 +217,10 @@ export const HAKARI_PLAYER_CSS = `
 .hakari-quality-btn {
   font-size: 12px;
   font-weight: 600;
+  /* Override .hakari-btn's line-height: 0 — that's tuned for SVG icons,
+     not text. Without it, hover background collapses around glyphs and
+     looks pasted-on. 1.5 gives the highlight breathing room top/bottom. */
+  line-height: 1.5;
   padding: 4px 10px;
   letter-spacing: 0.02em;
   min-width: 56px;
