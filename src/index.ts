@@ -10,3 +10,4 @@ export type {
   PlayerEventName,
   PlayerEventListener,
 } from './events'
+export type { Thumbnail } from './thumbnails'

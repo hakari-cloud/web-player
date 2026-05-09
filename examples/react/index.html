@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>@hakari/player/react — example</title>
+  <style>
+    body { background: #0a0a0a; color: #e8eaf0; font-family: system-ui, sans-serif; padding: 24px; max-width: 1000px; margin: 0 auto; }
+    h1 { margin: 0 0 16px; font-size: 1.4rem; }
+    label { display: block; font-size: 0.85rem; color: #aab; margin: 12px 0 4px; }
+    input { width: 100%; padding: 8px 10px; background: #15161e; border: 1px solid #2a2c3a; border-radius: 6px; color: #e8eaf0; font-family: ui-monospace, monospace; font-size: 0.78rem; }
+    button { padding: 8px 16px; background: #3BFFD4; color: #07080D; border: 0; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    button.secondary { background: transparent; color: #3BFFD4; border: 1px solid #3BFFD4; }
+    .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+    video { width: 100%; max-height: 540px; background: #000; border-radius: 8px; }
+    pre { background: #15161e; border: 1px solid #2a2c3a; border-radius: 6px; padding: 12px; font-size: 11px; white-space: pre-wrap; max-height: 220px; overflow: auto; }
+    .seekbar { position: relative; height: 24px; background: #15161e; border-radius: 4px; cursor: pointer; user-select: none; }
+    .seekbar-fill { height: 100%; background: rgba(59,255,212,.3); border-radius: 4px; }
+    .scrub-tooltip { position: absolute; bottom: 32px; transform: translateX(-50%); background: #000; padding: 4px; border-radius: 4px; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <h1>@hakari/player/react</h1>
+  <div id="root"></div>
+
+  <script type="module">
+    import React from 'react'
+    import { createRoot } from 'react-dom/client'
+    import { HakariVideo, ScrubThumbnail } from '../../src/react.tsx'
+
+    function App() {
+      const [src, setSrc] = React.useState(localStorage.getItem('hakari-player-react-src') || '')
+      const [vtt, setVtt] = React.useState(localStorage.getItem('hakari-player-react-vtt') || '')
+      const [log, setLog] = React.useState([])
+      const [duration, setDuration] = React.useState(0)
+      const [hoverTime, setHoverTime] = React.useState(null)
+      const [hoverX, setHoverX] = React.useState(0)
+      const ref = React.useRef(null)
+
+      const append = (...a) => setLog((l) => [...l, a.map((x) => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ')].slice(-30))
+
+      const onMouseMoveSeekbar = (e) => {
+        const rect = e.currentTarget.getBoundingClientRect()
+        const ratio = (e.clientX - rect.left) / rect.width
+        const t = Math.max(0, Math.min(duration, duration * ratio))
+        setHoverTime(t)
+        setHoverX(e.clientX - rect.left)
+      }
+
+      const onClickSeekbar = () => {
+        if (hoverTime == null || !ref.current) return
+        const v = ref.current.video()
+        if (v) v.currentTime = hoverTime
+      }
+
+      return (
+        React.createElement(React.Fragment, null,
+          React.createElement('label', null, 'Playback URL'),
+          React.createElement('input', { value: src, onChange: (e) => setSrc(e.target.value), placeholder: 'https://stream.hakari.cloud/.../master.m3u8?token=...' }),
+          React.createElement('label', null, 'Thumbnail VTT (optional, e.g. https://stream.hakari.cloud/vod/<id>/thumbnails.vtt)'),
+          React.createElement('input', { value: vtt, onChange: (e) => setVtt(e.target.value) }),
+          React.createElement('div', { className: 'row' },
+            React.createElement('button', {
+              onClick: () => {
+                localStorage.setItem('hakari-player-react-src', src)
+                localStorage.setItem('hakari-player-react-vtt', vtt)
+                setLog([])
+              }
+            }, 'Save & remount'),
+            React.createElement('button', { className: 'secondary', onClick: () => ref.current?.play() }, 'Play'),
+            React.createElement('button', { className: 'secondary', onClick: () => ref.current?.pause() }, 'Pause'),
+            React.createElement('button', { className: 'secondary', onClick: () => ref.current?.setQuality('auto') }, 'Auto quality'),
+          ),
+          src && React.createElement(HakariVideo, {
+            key: src + '|' + vtt,
+            ref,
+            src,
+            thumbnailVtt: vtt || undefined,
+            controls: true,
+            playsInline: true,
+            style: { marginTop: 16 },
+            debug: true,
+            onReady: (e) => { append('ready', e); setDuration(e.duration ?? 0) },
+            onPlaying: () => append('playing'),
+            onPause: () => append('pause'),
+            onEnded: () => append('ended'),
+            onError: (e) => append('error', e),
+            onQualityChange: (e) => append('qualitychange', e),
+          }),
+          duration > 0 && React.createElement('div', {
+            className: 'seekbar',
+            style: { marginTop: 12 },
+            onMouseMove: onMouseMoveSeekbar,
+            onMouseLeave: () => setHoverTime(null),
+            onClick: onClickSeekbar,
+          },
+            hoverTime != null && React.createElement('div', {
+              className: 'scrub-tooltip',
+              style: { left: hoverX + 'px' },
+            }, React.createElement(ScrubThumbnail, { player: ref, time: hoverTime })),
+            React.createElement('div', {
+              className: 'seekbar-fill',
+              style: { width: ((hoverTime ?? 0) / duration * 100) + '%' },
+            }),
+          ),
+          React.createElement('pre', null, log.join('\n')),
+        )
+      )
+    }
+
+    createRoot(document.getElementById('root')).render(React.createElement(App))
+  </script>
+</body>
+</html>

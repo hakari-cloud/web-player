@@ -96,6 +96,43 @@ player.autoQuality: boolean
 player.destroy(): void          // tear down hls.js, drop listeners
 ```
 
+## React
+
+```tsx
+import { HakariVideo, ScrubThumbnail, type HakariVideoHandle } from '@hakari/player/react'
+
+function StreamPage({ signedUrl, thumbnailsVtt }) {
+  const ref = useRef<HakariVideoHandle>(null)
+  const [hoverTime, setHoverTime] = useState<number | null>(null)
+
+  return (
+    <>
+      <HakariVideo
+        ref={ref}
+        src={signedUrl}
+        thumbnailVtt={thumbnailsVtt}
+        controls
+        autoPlay
+        muted
+        onReady={(e) => console.log('live?', e.live)}
+        onError={(e) => alert(e.message)}
+      />
+
+      {/* In your custom seekbar's mouse-hover handler:
+            setHoverTime(timeAtCursor)
+          Then render the preview tooltip: */}
+      {hoverTime != null && (
+        <ScrubThumbnail player={ref} time={hoverTime} />
+      )}
+    </>
+  )
+}
+```
+
+`react` and `react-dom` are declared as **optional peer dependencies**.
+The vanilla `@hakari/player` import has zero React payload — only
+customers who `import` from `@hakari/player/react` pay for the wrapper.
+
 ## Browser support
 
 - Chrome / Edge / Firefox: hls.js (MSE).

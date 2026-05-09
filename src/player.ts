@@ -6,6 +6,7 @@ import type {
   PlayerEventName,
   PlayerLevel,
 } from './events'
+import { HAKARI_THUMB_LABEL, pickThumbnailAt, type Thumbnail } from './thumbnails'
 
 export interface HakariPlayerOptions {
   /** Playback URL. Already-signed (token in query string) — the player
@@ -35,6 +36,12 @@ export interface HakariPlayerOptions {
 
   /** Verbose hls.js logging to console. Useful while integrating. */
   debug?: boolean
+
+  /** Optional WebVTT URL for sprite-based scrub thumbnails. Hakari's
+   *  transcoder writes this as `thumbnails.vtt` next to the master
+   *  playlist; pass it here and the player attaches a hidden metadata
+   *  track. Use `getThumbnailAt(time)` to look up a tile. */
+  thumbnailVtt?: string
 
   /** Override the underlying hls.js config. Merged on top of the player's
    *  defaults — escape hatch only, prefer dedicated options above. */
@@ -75,7 +82,27 @@ export class HakariPlayer {
     if (opts.muted) this.video.muted = true
     if (opts.autoplay) this.video.autoplay = true
 
+    this.attachThumbnailTrack()
     this.attach()
+  }
+
+  /** Inject a hidden metadata `<track>` for the sprite-thumbnail VTT.
+   *  The browser parses cues for us; `getThumbnailAt` reads from there.
+   *  No-op when `thumbnailVtt` isn't set. */
+  private attachThumbnailTrack(): void {
+    const url = this.opts.thumbnailVtt
+    if (!url) return
+    // Avoid duplicate tracks if a caller re-uses the same video element.
+    for (let i = 0; i < this.video.querySelectorAll('track').length; i++) {
+      const t = this.video.querySelectorAll('track')[i] as HTMLTrackElement | undefined
+      if (t && t.label === HAKARI_THUMB_LABEL) return
+    }
+    const track = document.createElement('track')
+    track.kind = 'metadata'
+    track.label = HAKARI_THUMB_LABEL
+    track.src = url
+    track.default = true
+    this.video.appendChild(track)
   }
 
   // ── lifecycle ──────────────────────────────────────────────────
@@ -170,6 +197,18 @@ export class HakariPlayer {
   /** Available levels (matches the most recent `levelparsed` payload). */
   get levels(): PlayerLevel[] {
     return this.hls ? toPublicLevels(this.hls.levels) : []
+  }
+
+  /** Sprite tile covering `time` (seconds). Returns null when:
+   *    - no `thumbnailVtt` was configured
+   *    - the VTT hasn't finished loading
+   *    - `time` falls outside the cue range (e.g. live edge of a stream
+   *      whose recorder hasn't written that frame yet).
+   *  Render with an `<img src={t.src}>` clipped to `(t.x, t.y, t.w, t.h)`,
+   *  or as a `background-image` with `background-position: -t.x -t.y`. */
+  getThumbnailAt(time: number): Thumbnail | null {
+    const vttUrl = this.opts.thumbnailVtt || null
+    return pickThumbnailAt(this.video, vttUrl, time)
   }
 
   /** True when ABR is in control, false when a level is pinned. */
