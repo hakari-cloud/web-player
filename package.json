@@ -1,7 +1,7 @@
 {
-  "name": "@hakari/player",
+  "name": "@hakari/web-player",
   "version": "0.1.0",
-  "description": "Embed-friendly HLS / LL-HLS player for Hakari live streams and VODs.",
+  "description": "Embed-friendly HLS / LL-HLS web player for Hakari live streams and VODs. Custom controls, sprite-thumbnail scrubbing, signed-playback aware.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -55,9 +55,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/PiratedKukreja/hakari-player.git"
+    "url": "git+https://github.com/hakari-cloud/web-player.git"
   },
   "homepage": "https://hakari.cloud",
+  "bugs": {
+    "url": "https://github.com/hakari-cloud/web-player/issues"
+  },
   "keywords": [
     "hls",
     "llhls",

@@ -1,4 +1,4 @@
-# @hakari/player
+# @hakari/web-player
 
 Embed-friendly HLS / LL-HLS player for [Hakari](https://hakari.cloud) live streams and VODs.
 
@@ -13,13 +13,13 @@ Wraps `hls.js` with sensible defaults for Hakari's signed-playback flow:
 ## Install
 
 ```sh
-npm i @hakari/player
+npm i @hakari/web-player
 ```
 
 ## Usage
 
 ```ts
-import { HakariPlayer } from '@hakari/player'
+import { HakariPlayer } from '@hakari/web-player'
 
 const video = document.getElementById('player') as HTMLVideoElement
 const player = new HakariPlayer(video, {
@@ -46,7 +46,7 @@ on `window`. ~160 KB gzipped.
 
 ```html
 <video id="v" controls playsinline></video>
-<script src="https://unpkg.com/@hakari/player/dist/hakari-player.standalone.global.js"></script>
+<script src="https://unpkg.com/@hakari/web-player/dist/web-player.standalone.global.js"></script>
 <script>
   new HakariPlayer(document.getElementById('v'), {
     src: 'https://stream.hakari.cloud/<orgSlug>/<streamKey>/llhls.m3u8?token=...',
@@ -107,7 +107,7 @@ The React subexport ships **two** components and one helper:
 | `<ScrubThumbnail>` | A single sprite tile cropped + positioned | Building a custom seekbar with `<HakariVideo>` and want our thumbnail rendering. |
 
 ```tsx
-import { HakariPlayer, type HakariPlayerHandle } from '@hakari/player/react'
+import { HakariPlayer, type HakariPlayerHandle } from '@hakari/web-player/react'
 
 function StreamPage({ signedUrl, thumbnailsVtt }) {
   const ref = useRef<HakariPlayerHandle>(null)
@@ -175,8 +175,8 @@ of passing the prop on every instance.
 ```
 
 `react` and `react-dom` are declared as **optional peer dependencies**.
-The vanilla `@hakari/player` import has zero React payload — only
-customers who `import` from `@hakari/player/react` pay for the wrapper.
+The vanilla `@hakari/web-player` import has zero React payload — only
+customers who `import` from `@hakari/web-player/react` pay for the wrapper.
 
 ## Browser support
 
@@ -186,8 +186,8 @@ customers who `import` from `@hakari/player/react` pay for the wrapper.
 ## Development
 
 ```sh
-git clone git@github.com:PiratedKukreja/hakari-player.git
-cd hakari-player
+git clone git@github.com:hakari-cloud/web-player.git
+cd web-player
 npm install
 npm run example   # vite dev server with examples/index.html
 npm run build     # produces dist/{esm,cjs,d.ts}
