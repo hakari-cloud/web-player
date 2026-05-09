@@ -222,6 +222,13 @@ export const HAKARI_PLAYER_CSS = `
   min-width: 56px;
   font-variant-numeric: tabular-nums;
 }
+.hakari-quality-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.hakari-quality-btn:disabled:hover {
+  background: transparent;
+}
 
 /* quality menu */
 .hakari-menu-wrap { position: relative; }

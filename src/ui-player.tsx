@@ -357,23 +357,31 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
 
             <span className="hakari-spacer" />
 
-            {ctrl.quality && levels.length > 0 && (
+            {ctrl.quality && (
               <div className="hakari-menu-wrap">
                 <button
                   className="hakari-btn hakari-quality-btn"
                   onClick={() => setQualityMenuOpen((v) => !v)}
                   aria-label="Quality"
                   aria-expanded={qualityMenuOpen}
+                  // Disabled (visually) until levels parse, but always
+                  // rendered so the slot in the bar is reserved and the
+                  // user knows quality control exists.
+                  disabled={levels.length === 0}
+                  title="Quality — Auto adapts to your connection"
                 >
-                  {autoQuality
-                    ? `Auto${activeLevelHeight ? ` · ${activeLevelHeight}p` : ''}`
-                    : `${activeLevelHeight ?? '—'}p`}
+                  {levels.length === 0
+                    ? 'Auto'
+                    : autoQuality
+                      ? `Auto${activeLevelHeight ? ` · ${activeLevelHeight}p` : ''}`
+                      : `${activeLevelHeight ?? '—'}p`}
                 </button>
-                {qualityMenuOpen && (
+                {qualityMenuOpen && levels.length > 0 && (
                   <div className="hakari-menu" onMouseLeave={() => setQualityMenuOpen(false)}>
                     <button
                       className={'hakari-menu-item' + (autoQuality ? ' active' : '')}
                       onClick={() => { playerRef.current?.setQuality('auto'); setQualityMenuOpen(false) }}
+                      title="Adapt to network conditions"
                     >
                       Auto{autoQuality && activeLevelHeight ? ` (${activeLevelHeight}p)` : ''}
                     </button>
