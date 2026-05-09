@@ -10,7 +10,18 @@ import {
   type VideoHTMLAttributes,
 } from 'react'
 
-import { HakariPlayer, type HakariPlayerOptions } from './player'
+// The full-UI player lives in ui-player.tsx; re-exported below as
+// `HakariPlayer` (the primary import for most React customers). The
+// existing `HakariVideo` here stays for callers who want a bare wrapper
+// with native browser controls.
+export {
+  HakariPlayerUI as HakariPlayer,
+  type HakariPlayerHandle,
+  type HakariPlayerProps,
+  type HakariPlayerControlsToggle,
+} from './ui-player'
+
+import { HakariPlayer as HakariPlayerCore, type HakariPlayerOptions } from './player'
 import type {
   ErrorEvent,
   LevelParsedEvent,
@@ -28,7 +39,7 @@ export interface HakariVideoHandle {
   setQuality: (height: number | 'auto') => void
   getThumbnailAt: (time: number) => Thumbnail | null
   /** Escape hatch — the underlying vanilla player. Use sparingly. */
-  player: () => HakariPlayer | null
+  player: () => HakariPlayerCore | null
   /** The native `<video>` for callers that want to read currentTime,
    *  attach extra listeners, etc. */
   video: () => HTMLVideoElement | null
@@ -91,7 +102,7 @@ export const HakariVideo = forwardRef<HakariVideoHandle, HakariVideoProps>(
     } = props
 
     const videoRef = useRef<HTMLVideoElement | null>(null)
-    const playerRef = useRef<HakariPlayer | null>(null)
+    const playerRef = useRef<HakariPlayerCore | null>(null)
 
     // Stash callbacks in refs so the lifecycle effect (which binds them
     // once on mount/src-change) always reads the latest user-supplied
@@ -120,7 +131,7 @@ export const HakariVideo = forwardRef<HakariVideoHandle, HakariVideoProps>(
       const video = videoRef.current
       if (!video || !src) return
 
-      const player = new HakariPlayer(video, {
+      const player = new HakariPlayerCore(video, {
         src,
         thumbnailVtt,
         lowLatency,

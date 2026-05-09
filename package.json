@@ -27,7 +27,8 @@
     "build": "tsup && tsup --config tsup.embed.config.ts",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
-    "example": "vite examples"
+    "example": "vite examples",
+    "example:react": "vite examples/react"
   },
   "dependencies": {
     "hls.js": "^1.6.16"

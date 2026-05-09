@@ -98,35 +98,54 @@ player.destroy(): void          // tear down hls.js, drop listeners
 
 ## React
 
+The React subexport ships **two** components and one helper:
+
+| Import | Renders | When to use |
+|---|---|---|
+| `<HakariPlayer>` | Custom controls UI (play/pause, seekbar with scrub thumbnails, time, mute, quality menu, fullscreen, live indicator) | The default. Drop in and you get a full player. |
+| `<HakariVideo>` | Bare `<video>` with native browser controls | When you want to build your own UI from scratch. |
+| `<ScrubThumbnail>` | A single sprite tile cropped + positioned | Building a custom seekbar with `<HakariVideo>` and want our thumbnail rendering. |
+
 ```tsx
-import { HakariVideo, ScrubThumbnail, type HakariVideoHandle } from '@hakari/player/react'
+import { HakariPlayer, type HakariPlayerHandle } from '@hakari/player/react'
 
 function StreamPage({ signedUrl, thumbnailsVtt }) {
-  const ref = useRef<HakariVideoHandle>(null)
-  const [hoverTime, setHoverTime] = useState<number | null>(null)
+  const ref = useRef<HakariPlayerHandle>(null)
 
   return (
-    <>
-      <HakariVideo
-        ref={ref}
-        src={signedUrl}
-        thumbnailVtt={thumbnailsVtt}
-        controls
-        autoPlay
-        muted
-        onReady={(e) => console.log('live?', e.live)}
-        onError={(e) => alert(e.message)}
-      />
-
-      {/* In your custom seekbar's mouse-hover handler:
-            setHoverTime(timeAtCursor)
-          Then render the preview tooltip: */}
-      {hoverTime != null && (
-        <ScrubThumbnail player={ref} time={hoverTime} />
-      )}
-    </>
+    <HakariPlayer
+      ref={ref}
+      src={signedUrl}
+      thumbnailVtt={thumbnailsVtt}
+      autoPlay
+      muted
+      accentColor="#3BFFD4"
+      onReady={(e) => console.log('live?', e.live)}
+      onError={(e) => alert(e.message)}
+    />
   )
 }
+```
+
+Imperative API on the ref:
+
+```ts
+ref.current?.play()
+ref.current?.pause()
+ref.current?.setQuality(720)        // or 'auto'
+ref.current?.toggleFullscreen()
+ref.current?.video()                 // raw HTMLVideoElement
+ref.current?.player()                // raw HakariPlayer (vanilla)
+```
+
+Hide individual controls with the `controls` prop:
+
+```tsx
+<HakariPlayer
+  src={signedUrl}
+  controls={{ quality: false, fullscreen: false }}  // hide just these two
+/>
+<HakariPlayer src={signedUrl} controls={false} />   // hide all controls
 ```
 
 `react` and `react-dom` are declared as **optional peer dependencies**.
