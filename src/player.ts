@@ -103,22 +103,24 @@ export class HakariPlayer {
    *  The browser parses cues for us; `getThumbnailAt` reads from there.
    *  No-op when `thumbnailVtt` isn't set.
    *
-   *  Token inheritance: when the playback `src` carries a `?token=…`
-   *  (Hakari's signed-playback bootstrap), the same token has to ride
-   *  on the thumbnail VTT request — otherwise the <track> fetch races
-   *  the master fetch and hits the edge BEFORE the Set-Cookie from the
-   *  master has landed in the browser. The signing JWT validates by
-   *  streamKey claim, not URL, so reusing the same token across child
-   *  URLs is correct (same key, same scope). If the customer already
-   *  signed thumbnailVtt themselves, we leave it alone. */
+   *  CF-auth inheritance: when the playback `src` carries the
+   *  CloudFront-style triple (?Policy=…&Signature=…&Key-Pair-Id=…)
+   *  for Hakari's signed-playback bootstrap, the same triple has to
+   *  ride on the thumbnail VTT request — otherwise the <track> fetch
+   *  races the master fetch and hits the edge BEFORE the Set-Cookie
+   *  has landed in the browser, and the VTT 404s. Policy's Resource
+   *  pattern uses a wildcard covering the whole stream/VOD path, so
+   *  reusing the triple across child URLs is correct (and exactly
+   *  what CF customers do). If the customer already signed
+   *  thumbnailVtt themselves, we leave it alone. */
   private attachThumbnailTrack(): void {
     let url = this.opts.thumbnailVtt
     if (!url) return
 
-    const srcToken = extractTokenFromUrl(this.opts.src)
-    const vttHasToken = /[?&]token=/.test(url)
-    if (srcToken && !vttHasToken) {
-      url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(srcToken)
+    const srcAuth = extractCfAuthFromUrl(this.opts.src)
+    const vttHasAuth = /[?&]Policy=/.test(url)
+    if (srcAuth && !vttHasAuth) {
+      url += (url.includes('?') ? '&' : '?') + srcAuth
     }
 
     // Avoid duplicate tracks if a caller re-uses the same video element.
@@ -406,13 +408,26 @@ function toPublicLevels(hlsLevels: readonly HlsRuntimeLevel[]): PlayerLevel[] {
   }))
 }
 
-/** Pull a `?token=…` query value out of a URL, decoded. Returns null
- *  if the URL has no token. Used to copy auth from the playback URL
- *  onto the thumbnail VTT URL so both ride with credentials before
- *  the edge cookie is established. */
-function extractTokenFromUrl(url: string): string | null {
-  const m = url.match(/[?&]token=([^&#]+)/)
-  return m ? decodeURIComponent(m[1]!) : null
+/** Pull the three CloudFront-style auth params (Policy, Signature,
+ *  Key-Pair-Id) from a URL and return them re-encoded as a query
+ *  fragment ready to append to a sibling URL. Returns null when any
+ *  of the three are absent. Used to ferry auth from the playback URL
+ *  onto the thumbnail VTT URL so the <track> fetch carries auth
+ *  before the edge cookies have landed. */
+function extractCfAuthFromUrl(url: string): string | null {
+  const q = url.indexOf('?')
+  if (q < 0) return null
+  const have: Record<string, string> = {}
+  for (const kv of url.substring(q + 1).split('&')) {
+    const eq = kv.indexOf('=')
+    if (eq < 0) continue
+    const name = kv.substring(0, eq)
+    if (name === 'Policy' || name === 'Signature' || name === 'Key-Pair-Id') {
+      have[name] = kv.substring(eq + 1)  // already encoded; pass through
+    }
+  }
+  if (!have.Policy || !have.Signature || !have['Key-Pair-Id']) return null
+  return `Policy=${have.Policy}&Signature=${have.Signature}&Key-Pair-Id=${have['Key-Pair-Id']}`
 }
 
 /** Pull HTTP status code off an hls.js error payload. Different error
