@@ -64,6 +64,7 @@ export interface HakariVideoProps
    *  before overriding `withCredentials` or `lowLatency`. */
   lowLatency?: boolean
   withCredentials?: boolean
+  overrideNative?: boolean
   debug?: boolean
   hlsConfig?: HakariPlayerOptions['hlsConfig']
 
@@ -89,6 +90,7 @@ export const HakariVideo = forwardRef<HakariVideoHandle, HakariVideoProps>(
       thumbnailVtt,
       lowLatency,
       withCredentials,
+      overrideNative,
       debug,
       hlsConfig,
       onReady,
@@ -136,6 +138,7 @@ export const HakariVideo = forwardRef<HakariVideoHandle, HakariVideoProps>(
         thumbnailVtt,
         lowLatency,
         withCredentials,
+        overrideNative,
         debug,
         hlsConfig,
       })

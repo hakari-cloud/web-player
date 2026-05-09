@@ -62,6 +62,7 @@ export interface HakariPlayerProps
 
   lowLatency?: boolean
   withCredentials?: boolean
+  overrideNative?: boolean
   debug?: boolean
   hlsConfig?: HakariPlayerOptions['hlsConfig']
 
@@ -105,6 +106,7 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
       thumbnailVtt,
       lowLatency,
       withCredentials,
+      overrideNative,
       debug,
       hlsConfig,
       accentColor,
@@ -153,7 +155,7 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
       if (!video || !src) return
 
       const player = new HakariPlayer(video, {
-        src, thumbnailVtt, lowLatency, withCredentials, debug, hlsConfig,
+        src, thumbnailVtt, lowLatency, withCredentials, overrideNative, debug, hlsConfig,
       })
       playerRef.current = player
 

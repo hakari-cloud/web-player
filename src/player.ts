@@ -43,6 +43,19 @@ export interface HakariPlayerOptions {
    *  track. Use `getThumbnailAt(time)` to look up a tile. */
   thumbnailVtt?: string
 
+  /** Prefer hls.js over the browser's native HLS implementation, even
+   *  when both are available. Defaults to true — gives us consistent
+   *  quality control / ABR events / EME hooks across Chrome, Firefox,
+   *  Edge, AND Safari. Set to false to use native HLS where the browser
+   *  reports support (Safari + iOS WebKit) — wins hardware decode and
+   *  battery, loses our quality menu (no JS API for variant list).
+   *
+   *  Note: Chrome desktop reports `'maybe'` for HLS but doesn't really
+   *  play it the way Safari does, so flipping this to false on Chrome
+   *  silently breaks playback. Don't override unless you know what
+   *  browser you're targeting. */
+  overrideNative?: boolean
+
   /** Override the underlying hls.js config. Merged on top of the player's
    *  defaults — escape hatch only, prefer dedicated options above. */
   hlsConfig?: Partial<ConstructorParameters<typeof Hls>[0]>
@@ -110,16 +123,32 @@ export class HakariPlayer {
   private attach(): void {
     const { src } = this.opts
     const withCreds = this.opts.withCredentials !== false
+    const overrideNative = this.opts.overrideNative !== false
 
-    // Native HLS — Safari, iOS WebView. Hardware decode + battery win.
-    // No EME / DRM hooks on this path; that's a tomorrow problem.
-    if (this.video.canPlayType('application/vnd.apple.mpegurl')) {
-      this.video.src = src
-      this.bindNativeEvents(/* native: */ true)
-      return
+    // Path priority depends on `overrideNative` (default true). When
+    // true: prefer hls.js wherever MSE is available, fall back to
+    // native only when MSE isn't there. This is what video.js / JW /
+    // Mux / Bitmovin all do — fixes Chrome's misleading
+    // canPlayType('application/vnd.apple.mpegurl') = 'maybe' (Chrome
+    // reports vague HLS support but doesn't actually play it like
+    // Safari does). When false: prefer native HLS where supported
+    // (Safari hardware decode), fall back to hls.js elsewhere.
+    const tryNative = (): boolean => {
+      if (this.video.canPlayType('application/vnd.apple.mpegurl')) {
+        this.video.src = src
+        this.bindNativeEvents(/* native: */ true)
+        return true
+      }
+      return false
     }
 
+    if (!overrideNative && tryNative()) return
+
     if (!Hls.isSupported()) {
+      // MSE unavailable — last resort to native (Safari path when
+      // overrideNative is on and MSE somehow not supported, or any
+      // other browser without MSE).
+      if (overrideNative && tryNative()) return
       this.emit('error', {
         fatal: true,
         type: 'INIT_ERROR',
