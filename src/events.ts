@@ -55,6 +55,18 @@ export interface ErrorEvent {
   denyReason?: string
 }
 
+export interface LiveSyncEvent {
+  /** True when the player is within `liveLatency.max` of the live edge.
+   *  Flips to false on user seek-back or buffer drift; back to true once
+   *  hls.js (or a `goLive()` call) catches up. UI uses this to switch the
+   *  "Live" indicator between active and "Go live" affordances. */
+  atEdge: boolean
+  /** Current latency in seconds (live-edge minus current playback time).
+   *  Always ≥ 0. NaN if the player can't compute it yet (no live edge
+   *  reported). */
+  latency: number
+}
+
 /** Map of event name → payload type. Used to give `on()` autocomplete on
  *  both the event name and the payload it receives. */
 export interface PlayerEventMap {
@@ -65,6 +77,7 @@ export interface PlayerEventMap {
   error: ErrorEvent
   qualitychange: QualityChangeEvent
   levelparsed: LevelParsedEvent
+  livesync: LiveSyncEvent
 }
 
 export type PlayerEventName = keyof PlayerEventMap

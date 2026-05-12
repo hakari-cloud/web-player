@@ -171,6 +171,7 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
     const [currentTime, setCurrentTime] = useState(0)
     const [bufferedEnd, setBufferedEnd] = useState(0)
     const [isLive, setIsLive] = useState(false)
+    const [isAtLiveEdgeState, setIsAtLiveEdgeState] = useState(true)
     const [levels, setLevels] = useState<PlayerLevel[]>([])
     const [activeLevelHeight, setActiveLevelHeight] = useState<number | null>(null)
     const [autoQuality, setAutoQuality] = useState(true)
@@ -204,6 +205,7 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
           setAutoQuality(e.auto)
           cbs.current.onQualityChange?.(e)
         }),
+        player.on('livesync', (e) => setIsAtLiveEdgeState(e.atEdge)),
         player.on('playing', () => { setIsPlaying(true); cbs.current.onPlaying?.() }),
         player.on('pause', () => { setIsPlaying(false); cbs.current.onPause?.() }),
         player.on('ended', () => { setIsPlaying(false); cbs.current.onEnded?.() }),
@@ -361,7 +363,10 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
         {/* LIVE indicator (top-left) */}
         {isLive && (
           <div style={{ position: 'absolute', top: 12, left: 12 }}>
-            <LiveBadge atLiveEdge={isAtLiveEdge(currentTime, bufferedEnd)} onClick={() => seekToLive(videoRef.current, bufferedEnd)} />
+            <LiveBadge
+              atLiveEdge={isAtLiveEdgeState}
+              onClick={() => playerRef.current?.goLive()}
+            />
           </div>
         )}
 
@@ -396,21 +401,20 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
 
             {/* Live button — only for live streams. At edge: pulsing red
                 dot + LIVE label, no-op on click (already there). Behind:
-                grey dot + GO LIVE label, click jumps near bufferedEnd. */}
-            {isLive && (() => {
-              const atEdge = isAtLiveEdge(currentTime, bufferedEnd)
-              return (
-                <button
-                  className={'hakari-btn hakari-live-btn' + (atEdge ? '' : ' behind')}
-                  onClick={() => seekToLive(videoRef.current, bufferedEnd)}
-                  title={atEdge ? 'Watching live' : 'Jump to live'}
-                  aria-label={atEdge ? 'Live' : 'Jump to live'}
-                >
-                  <span className="hakari-live-dot-inline" />
-                  <span>{atEdge ? 'LIVE' : 'GO LIVE'}</span>
-                </button>
-              )
-            })()}
+                grey dot + GO LIVE label, click jumps to the configured
+                target latency and lets hls.js maintain via
+                liveMaxLatencyDuration + maxLiveSyncPlaybackRate. */}
+            {isLive && (
+              <button
+                className={'hakari-btn hakari-live-btn' + (isAtLiveEdgeState ? '' : ' behind')}
+                onClick={() => playerRef.current?.goLive()}
+                title={isAtLiveEdgeState ? 'Watching live' : 'Jump to live'}
+                aria-label={isAtLiveEdgeState ? 'Live' : 'Jump to live'}
+              >
+                <span className="hakari-live-dot-inline" />
+                <span>{isAtLiveEdgeState ? 'LIVE' : 'GO LIVE'}</span>
+              </button>
+            )}
 
             <span className="hakari-spacer" />
 
@@ -598,19 +602,6 @@ function LiveBadge({ atLiveEdge, onClick }: { atLiveEdge: boolean; onClick: () =
       <span>{atLiveEdge ? 'Live' : 'Go live'}</span>
     </div>
   )
-}
-
-function isAtLiveEdge(currentTime: number, bufferedEnd: number): boolean {
-  if (bufferedEnd <= 0) return true
-  return bufferedEnd - currentTime < 8 // within 8s of buffer end = at edge
-}
-
-function seekToLive(video: HTMLVideoElement | null, bufferedEnd: number) {
-  if (!video || bufferedEnd <= 0) return
-  // Step a hair before the absolute edge so we don't immediately stall
-  // waiting for a brand-new segment.
-  video.currentTime = Math.max(0, bufferedEnd - 1)
-  video.play().catch(() => {})
 }
 
 // ──────────────────────────────────────────────────────────────────────

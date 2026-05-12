@@ -56,16 +56,35 @@ export interface HakariPlayerOptions {
    *  browser you're targeting. */
   overrideNative?: boolean
 
+  /** Target live latency in seconds — how far behind the live edge the
+   *  player aims to play. hls.js will gently speed up playback (up to
+   *  `maxLiveSyncPlaybackRate`) to maintain this. Defaults:
+   *    - LL-HLS (`lowLatency: true`):  `{ target: 4, max: 6 }`
+   *    - Classic HLS:                  `{ target: 15, max: 20 }`
+   *  `target` becomes hls.js's `liveSyncDuration`; `max` becomes
+   *  `liveMaxLatencyDuration`. Tighter targets risk stalls on poor
+   *  networks — keep both within the protocol's natural floor (3s
+   *  for LL-HLS, ~10s for classic HLS). */
+  liveLatency?: { target: number; max: number }
+
   /** Override the underlying hls.js config. Merged on top of the player's
    *  defaults — escape hatch only, prefer dedicated options above. */
   hlsConfig?: Partial<ConstructorParameters<typeof Hls>[0]>
 }
+
+const DEFAULT_LL_LATENCY = { target: 4, max: 6 }
+const DEFAULT_HLS_LATENCY = { target: 15, max: 20 }
+const LIVE_EDGE_CHECK_MS = 1000
 
 export class HakariPlayer {
   private readonly video: HTMLVideoElement
   private readonly opts: HakariPlayerOptions
   private hls: Hls | null = null
   private destroyed = false
+  private isLive = false
+  private liveLatencyConfig: { target: number; max: number } = DEFAULT_HLS_LATENCY
+  private liveEdgeTimer: ReturnType<typeof setInterval> | null = null
+  private lastAtEdge = false
   private readonly listeners: {
     [K in PlayerEventName]?: Set<PlayerEventListener<K>>
   } = {}
@@ -176,9 +195,22 @@ export class HakariPlayer {
       return
     }
 
+    const lowLatency = this.opts.lowLatency !== false
+    const latency = this.opts.liveLatency
+      || (lowLatency ? DEFAULT_LL_LATENCY : DEFAULT_HLS_LATENCY)
+
     const hls = new Hls({
       enableWorker: true,
-      lowLatencyMode: this.opts.lowLatency !== false,
+      lowLatencyMode: lowLatency,
+      // hls.js maintains the live latency itself once these are set:
+      // playback speeds up (up to maxLiveSyncPlaybackRate) when the user
+      // falls behind `liveMaxLatencyDuration`, and re-syncs to
+      // `liveSyncDuration` of the live edge. That's the "stick to live"
+      // behavior — we just need to seek to the live edge once via
+      // goLive() and hls.js takes over.
+      liveSyncDuration: latency.target,
+      liveMaxLatencyDuration: latency.max,
+      maxLiveSyncPlaybackRate: 1.05,
       debug: !!this.opts.debug,
       ...(withCreds
         ? { xhrSetup: (xhr) => { xhr.withCredentials = true } }
@@ -186,6 +218,7 @@ export class HakariPlayer {
       ...(this.opts.hlsConfig || {}),
     })
     this.hls = hls
+    this.liveLatencyConfig = latency
 
     hls.on(Hls.Events.MANIFEST_PARSED, this.onManifestParsed)
     hls.on(Hls.Events.LEVEL_SWITCHED, this.onLevelSwitched)
@@ -209,6 +242,10 @@ export class HakariPlayer {
     if (this.notFoundTimer) {
       clearTimeout(this.notFoundTimer)
       this.notFoundTimer = null
+    }
+    if (this.liveEdgeTimer) {
+      clearInterval(this.liveEdgeTimer)
+      this.liveEdgeTimer = null
     }
     if (this.hls) {
       try { this.hls.destroy() } catch { /* ignore */ }
@@ -267,6 +304,47 @@ export class HakariPlayer {
     return this.hls ? this.hls.autoLevelEnabled : true
   }
 
+  /** True only for live streams (LL-HLS / HLS without #EXT-X-ENDLIST). */
+  get live(): boolean {
+    return this.isLive
+  }
+
+  /** Current latency from the live edge in seconds. NaN before the
+   *  player knows the live edge (pre-manifest or non-live source). */
+  get liveLatency(): number {
+    return this.isLive ? this.computeLatency() : NaN
+  }
+
+  /** True when current playback is within `liveLatency.max` of the live
+   *  edge — i.e. "watching live". The UI uses this to render the
+   *  pulsing red Live badge instead of the gray "Go live" button. */
+  get atLiveEdge(): boolean {
+    if (!this.isLive) return false
+    const l = this.computeLatency()
+    return Number.isFinite(l) ? l <= this.liveLatencyConfig.max : true
+  }
+
+  /** Jump to the live edge and let hls.js maintain target latency from
+   *  there. Safe to call when not live (no-op). After this fires, hls.js
+   *  auto-speeds-up if the viewer falls behind `liveMaxLatencyDuration`
+   *  via `maxLiveSyncPlaybackRate` (1.05× by default) — that's the
+   *  "stick to live" behavior. */
+  goLive(): void {
+    if (!this.isLive) return
+    if (this.hls && this.hls.liveSyncPosition != null && Number.isFinite(this.hls.liveSyncPosition)) {
+      this.video.currentTime = this.hls.liveSyncPosition
+    } else {
+      // Native HLS — seek to the seekable end minus a hair so we don't
+      // immediately stall waiting on the next segment.
+      const seekable = this.video.seekable
+      if (seekable.length > 0) {
+        const end = seekable.end(seekable.length - 1)
+        this.video.currentTime = Math.max(0, end - 1)
+      }
+    }
+    this.video.play().catch(() => {})
+  }
+
   on<K extends PlayerEventName>(event: K, listener: PlayerEventListener<K>): () => void {
     let bucket = this.listeners[event] as Set<PlayerEventListener<K>> | undefined
     if (!bucket) {
@@ -293,14 +371,51 @@ export class HakariPlayer {
       this.notFoundTimer = null
     }
     const levels = toPublicLevels(data.levels)
+    const live = !!(data as ManifestParsedData & { live?: boolean }).live
+    this.isLive = live
     this.emit('levelparsed', { levels })
     this.emit('ready', {
       duration: Number.isFinite(this.video.duration) && this.video.duration > 0
         ? this.video.duration
         : null,
-      live: !!(data as ManifestParsedData & { live?: boolean }).live,
+      live,
       levels,
     })
+    // Start polling for live-edge drift so the UI can flip its "Live"
+    // affordance to "Go live" when the viewer falls behind (manual seek,
+    // pause-then-resume, network stall).
+    if (live) this.startLiveEdgeMonitor()
+  }
+
+  private startLiveEdgeMonitor(): void {
+    if (this.liveEdgeTimer) return
+    this.liveEdgeTimer = setInterval(() => {
+      if (this.destroyed) return
+      const latency = this.computeLatency()
+      const atEdge = Number.isFinite(latency)
+        ? latency <= this.liveLatencyConfig.max
+        : true // not enough info yet — assume live
+      if (atEdge !== this.lastAtEdge) {
+        this.lastAtEdge = atEdge
+        this.emit('livesync', { atEdge, latency })
+      }
+    }, LIVE_EDGE_CHECK_MS)
+  }
+
+  private computeLatency(): number {
+    if (!this.hls) {
+      // Native HLS path — derive from seekable.end.
+      const seekable = this.video.seekable
+      if (seekable.length === 0) return NaN
+      return Math.max(0, seekable.end(seekable.length - 1) - this.video.currentTime)
+    }
+    // hls.js exposes liveSyncPosition (target playback position for live
+    // edge minus liveSyncDuration). Add liveSyncDuration back to get the
+    // absolute edge, then subtract current time.
+    const sync = this.hls.liveSyncPosition
+    if (sync == null || !Number.isFinite(sync)) return NaN
+    const edge = sync + this.liveLatencyConfig.target
+    return Math.max(0, edge - this.video.currentTime)
   }
 
   private onLevelSwitched = (_evt: unknown, data: LevelSwitchedData): void => {
