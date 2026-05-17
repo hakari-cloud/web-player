@@ -23,6 +23,7 @@ export {
 } from './ui-player'
 
 import { HakariPlayer as HakariPlayerCore, type HakariPlayerOptions } from './player'
+import { HakariWebRTCPlayer, type HakariWebRTCOptions } from './webrtc'
 import type {
   ErrorEvent,
   LevelParsedEvent,
@@ -254,3 +255,71 @@ export function ScrubThumbnail({
 function isRefObject<T>(r: Ref<T>): r is { current: T | null } {
   return r != null && typeof r === 'object' && 'current' in (r as object)
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// <HakariWebRTC /> — sub-second latency engine over OME's WS signalling.
+//
+// Use this where LL-HLS's ~2s latency is too slow (auctions, live chat
+// overlays, simulcast). No DVR, no quality switching, single peer
+// connection.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface HakariWebRTCHandle {
+  play: () => Promise<void>
+  pause: () => void
+  player: () => HakariWebRTCPlayer | null
+  video: () => HTMLVideoElement | null
+}
+
+export interface HakariWebRTCProps
+  extends Omit<
+    VideoHTMLAttributes<HTMLVideoElement>,
+    'src' | 'children' | 'onError' | 'onPlaying' | 'onPause' | 'onEnded'
+  > {
+  src: string
+  transport?: HakariWebRTCOptions['transport']
+  debug?: boolean
+  onReady?: (e: ReadyEvent) => void
+  onPlaying?: () => void
+  onError?: (e: ErrorEvent) => void
+}
+
+export const HakariWebRTC = forwardRef<HakariWebRTCHandle, HakariWebRTCProps>(
+  function HakariWebRTC(props, ref) {
+    const { src, transport, debug, onReady, onPlaying, onError, ...videoProps } = props
+    const videoRef = useRef<HTMLVideoElement | null>(null)
+    const playerRef = useRef<HakariWebRTCPlayer | null>(null)
+    const cbs = useRef({ onReady, onPlaying, onError })
+    cbs.current = { onReady, onPlaying, onError }
+
+    useEffect(() => {
+      const video = videoRef.current
+      if (!video || !src) return
+      const player = new HakariWebRTCPlayer(video, { src, transport, debug })
+      playerRef.current = player
+      const offs = [
+        player.on('ready', (e) => cbs.current.onReady?.(e)),
+        player.on('playing', () => cbs.current.onPlaying?.()),
+        player.on('error', (e) => cbs.current.onError?.(e)),
+      ]
+      return () => {
+        for (const off of offs) off()
+        player.destroy()
+        playerRef.current = null
+      }
+    }, [src, transport, debug])
+
+    useImperativeHandle(
+      ref,
+      (): HakariWebRTCHandle => ({
+        play: () => playerRef.current?.play() ?? Promise.resolve(),
+        pause: () => playerRef.current?.pause(),
+        player: () => playerRef.current,
+        video: () => videoRef.current,
+      }),
+      [],
+    )
+
+    return <video ref={videoRef} {...videoProps} />
+  },
+)

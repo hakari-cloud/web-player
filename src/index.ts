@@ -1,5 +1,7 @@
 export { HakariPlayer } from './player'
 export type { HakariPlayerOptions } from './player'
+export { HakariWebRTCPlayer } from './webrtc'
+export type { HakariWebRTCOptions } from './webrtc'
 export type {
   PlayerLevel,
   ReadyEvent,

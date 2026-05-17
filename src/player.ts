@@ -153,6 +153,12 @@ export class HakariPlayer {
     track.src = url
     track.default = true
     this.video.appendChild(track)
+    // Browsers leave metadata tracks in `disabled` mode by default even
+    // when `default` is set; `disabled` means cues are not surfaced to
+    // JS (track.track.cues stays null). We need `hidden` so the cues
+    // load and getThumbnailAt() can find them — `showing` would also
+    // work but it's only meaningful for caption-style tracks.
+    if (track.track) track.track.mode = 'hidden'
   }
 
   // ── lifecycle ──────────────────────────────────────────────────
