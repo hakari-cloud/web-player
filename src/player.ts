@@ -137,9 +137,16 @@ export class HakariPlayer {
     if (!url) return
 
     const srcAuth = extractCfAuthFromUrl(this.opts.src)
-    const vttHasAuth = /[?&]Policy=/.test(url)
+    const vttHasAuth = /[?&]Policy=/.test(url) || /\/s\/[^/]+\//.test(url)
     if (srcAuth && !vttHasAuth) {
       url += (url.includes('?') ? '&' : '?') + srcAuth
+    }
+    // Path-signed src (https://host/s/<token>/…): give an unsigned VTT on the
+    // same host the same /s/<token> prefix.
+    const pathToken = /^(https?:\/\/[^/]+)\/s\/([^/]+)\//.exec(this.opts.src)
+    if (pathToken && !vttHasAuth) {
+      const origin = pathToken[1] ?? "", token = pathToken[2] ?? ""
+      if (url.startsWith(origin + '/')) url = `${origin}/s/${token}${url.slice(origin.length)}`
     }
 
     // Avoid duplicate tracks if a caller re-uses the same video element.
