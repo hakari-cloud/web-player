@@ -218,9 +218,7 @@ export class HakariPlayer {
       liveMaxLatencyDuration: latency.max,
       maxLiveSyncPlaybackRate: 1.05,
       debug: !!this.opts.debug,
-      ...(withCreds
-        ? { xhrSetup: (xhr) => { xhr.withCredentials = true } }
-        : {}),
+      xhrSetup: signedXhrSetup(src, withCreds),
       ...(this.opts.hlsConfig || {}),
     })
     this.hls = hls
@@ -535,6 +533,34 @@ function toPublicLevels(hlsLevels: readonly HlsRuntimeLevel[]): PlayerLevel[] {
  *  of the three are absent. Used to ferry auth from the playback URL
  *  onto the thumbnail VTT URL so the <track> fetch carries auth
  *  before the edge cookies have landed. */
+/**
+ * hls.js request hook for signed playback.
+ *
+ * Variant playlists and segments are referenced by relative URLs, and URL
+ * resolution drops the master's query string, so a signed `src` only signs
+ * the master. The edge also sets a `Hakari-Auth` cookie on that first hit,
+ * but browsers drop it often enough (privacy settings, extensions, partitioned
+ * storage) that playback cannot depend on it. When `src` carries the
+ * CloudFront-style triple, the same triple is appended to every request to
+ * the same host: the policy's Resource covers the whole stream or VOD path,
+ * so this is exactly how signed URLs are meant to be reused.
+ */
+export function signedXhrSetup(src: string, withCredentials: boolean) {
+  const auth = extractCfAuthFromUrl(src)
+  let host = ''
+  try { host = new URL(src).host } catch { /* relative src: same host */ }
+  return (xhr: XMLHttpRequest, url: string) => {
+    let target = url
+    if (auth && !/[?&]Policy=/.test(url)) {
+      let sameHost = true
+      try { sameHost = !host || new URL(url, src).host === host } catch { /* keep */ }
+      if (sameHost) target = url + (url.includes('?') ? '&' : '?') + auth
+    }
+    if (target !== url) xhr.open('GET', target, true)
+    if (withCredentials) xhr.withCredentials = true
+  }
+}
+
 function extractCfAuthFromUrl(url: string): string | null {
   const q = url.indexOf('?')
   if (q < 0) return null
