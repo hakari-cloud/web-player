@@ -1,6 +1,7 @@
 import Hls, { type ErrorData, type ManifestParsedData, type LevelSwitchedData } from 'hls.js'
 import type {
   ErrorEvent,
+  PlayerAudioTrack,
   PlayerEventListener,
   PlayerEventMap,
   PlayerEventName,
@@ -233,6 +234,8 @@ export class HakariPlayer {
 
     hls.on(Hls.Events.MANIFEST_PARSED, this.onManifestParsed)
     hls.on(Hls.Events.LEVEL_SWITCHED, this.onLevelSwitched)
+    hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, this.onAudioTracks)
+    hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, this.onAudioTracks)
     hls.on(Hls.Events.ERROR, this.onHlsError)
 
     hls.loadSource(src)
@@ -291,6 +294,21 @@ export class HakariPlayer {
     }
     const idx = this.hls.levels.findIndex((l) => l.height === height)
     if (idx >= 0) this.hls.currentLevel = idx
+  }
+
+  /** Audio renditions: the original soundtrack plus any dubbed languages. */
+  get audioTracks(): PlayerAudioTrack[] {
+    return this.hls ? this.hls.audioTracks.map((t, i) => ({ id: i, name: t.name, language: t.lang || undefined, default: !!t.default })) : []
+  }
+
+  /** Index of the playing audio track (-1 before the manifest loads). */
+  get audioTrack(): number {
+    return this.hls ? this.hls.audioTrack : -1
+  }
+
+  /** Switch to another audio rendition (e.g. a dubbed language). */
+  setAudioTrack(id: number): void {
+    if (this.hls && id >= 0 && id < this.hls.audioTracks.length) this.hls.audioTrack = id
   }
 
   /** Available levels (matches the most recent `levelparsed` payload). */
@@ -427,6 +445,11 @@ export class HakariPlayer {
     if (sync == null || !Number.isFinite(sync)) return NaN
     const edge = sync + this.liveLatencyConfig.target
     return Math.max(0, edge - this.video.currentTime)
+  }
+
+  private onAudioTracks = (): void => {
+    if (!this.hls) return
+    this.emit('audiotracks', { tracks: this.audioTracks, current: this.hls.audioTrack })
   }
 
   private onLevelSwitched = (_evt: unknown, data: LevelSwitchedData): void => {

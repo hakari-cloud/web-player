@@ -33,6 +33,23 @@ export interface QualityChangeEvent {
   auto: boolean
 }
 
+/** An audio rendition: the original soundtrack or a dubbed language. */
+export interface PlayerAudioTrack {
+  /** Index to pass to `setAudioTrack`. */
+  id: number
+  /** Display name from the manifest (e.g. "Original", "বাংলা"). */
+  name: string
+  /** BCP-47 / ISO language code, when the manifest gives one. */
+  language?: string
+  default: boolean
+}
+
+export interface AudioTracksEvent {
+  tracks: PlayerAudioTrack[]
+  /** id of the playing track. */
+  current: number
+}
+
 export interface LevelParsedEvent {
   levels: PlayerLevel[]
 }
@@ -78,6 +95,7 @@ export interface PlayerEventMap {
   qualitychange: QualityChangeEvent
   levelparsed: LevelParsedEvent
   livesync: LiveSyncEvent
+  audiotracks: AudioTracksEvent
 }
 
 export type PlayerEventName = keyof PlayerEventMap

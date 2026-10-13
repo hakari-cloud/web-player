@@ -72,6 +72,8 @@ export interface HakariPlayerControlsToggle {
   mute?: boolean
   /** Quality menu. Default true; auto-hides when only one quality exists. */
   quality?: boolean
+  /** Audio-language menu (original + dubbed tracks). Default true; only shown when there is more than one track. */
+  audio?: boolean
   /** Fullscreen toggle. Default true. */
   fullscreen?: boolean
 }
@@ -121,6 +123,7 @@ const DEFAULT_CONTROLS: Required<HakariPlayerControlsToggle> = {
   time: true,
   mute: true,
   quality: true,
+  audio: true,
   fullscreen: true,
 }
 
@@ -177,6 +180,9 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
     const [autoQuality, setAutoQuality] = useState(true)
     const [isFullscreen, setIsFullscreen] = useState(false)
     const [qualityMenuOpen, setQualityMenuOpen] = useState(false)
+    const [audioTracks, setAudioTracks] = useState<{ id: number; name: string; language?: string }[]>([])
+    const [audioTrack, setAudioTrack] = useState(-1)
+    const [audioMenuOpen, setAudioMenuOpen] = useState(false)
     const [idle, setIdle] = useState(false)
     const idleTimer = useRef<number | null>(null)
 
@@ -199,6 +205,10 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
         player.on('levelparsed', (e) => {
           setLevels(e.levels)
           cbs.current.onLevelParsed?.(e)
+        }),
+        player.on('audiotracks', (e) => {
+          setAudioTracks(e.tracks)
+          setAudioTrack(e.current)
         }),
         player.on('qualitychange', (e) => {
           setActiveLevelHeight(e.height)
@@ -301,7 +311,7 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
     // ── derived ───────────────────────────────────────────────────
 
     const ctrl: Required<HakariPlayerControlsToggle> = useMemo(() => {
-      if (controls === false) return { play: false, seek: false, time: false, mute: false, quality: false, fullscreen: false }
+      if (controls === false) return { play: false, seek: false, time: false, mute: false, quality: false, audio: false, fullscreen: false }
       if (controls === true || controls === undefined) return DEFAULT_CONTROLS
       return { ...DEFAULT_CONTROLS, ...controls }
     }, [controls])
@@ -417,6 +427,33 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
             )}
 
             <span className="hakari-spacer" />
+
+            {ctrl.audio && audioTracks.length > 1 && (
+              <div className="hakari-menu-wrap">
+                <button
+                  className="hakari-btn hakari-quality-btn"
+                  onClick={() => setAudioMenuOpen((v) => !v)}
+                  aria-label="Audio language"
+                  aria-expanded={audioMenuOpen}
+                  title="Audio language"
+                >
+                  {audioTracks.find((t) => t.id === audioTrack)?.name || 'Audio'}
+                </button>
+                {audioMenuOpen && (
+                  <div className="hakari-menu" onMouseLeave={() => setAudioMenuOpen(false)}>
+                    {audioTracks.map((t) => (
+                      <button
+                        key={t.id}
+                        className={'hakari-menu-item' + (t.id === audioTrack ? ' active' : '')}
+                        onClick={() => { playerRef.current?.setAudioTrack(t.id); setAudioMenuOpen(false) }}
+                      >
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {ctrl.quality && (
               <div className="hakari-menu-wrap">
