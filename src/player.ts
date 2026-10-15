@@ -2,6 +2,7 @@ import Hls, { type ErrorData, type ManifestParsedData, type LevelSwitchedData } 
 import type {
   ErrorEvent,
   PlayerAudioTrack,
+  PlayerSubtitleTrack,
   PlayerEventListener,
   PlayerEventMap,
   PlayerEventName,
@@ -236,6 +237,8 @@ export class HakariPlayer {
     hls.on(Hls.Events.LEVEL_SWITCHED, this.onLevelSwitched)
     hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, this.onAudioTracks)
     hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, this.onAudioTracks)
+    hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, this.onSubtitleTracks)
+    hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, this.onSubtitleTracks)
     hls.on(Hls.Events.ERROR, this.onHlsError)
 
     hls.loadSource(src)
@@ -309,6 +312,29 @@ export class HakariPlayer {
   /** Switch to another audio rendition (e.g. a dubbed language). */
   setAudioTrack(id: number): void {
     if (this.hls && id >= 0 && id < this.hls.audioTracks.length) this.hls.audioTrack = id
+  }
+
+  /** Subtitle renditions listed in the manifest (live captions, VOD subtitle tracks). */
+  get subtitleTracks(): PlayerSubtitleTrack[] {
+    return this.hls ? this.hls.subtitleTracks.map((t, i) => ({ id: i, name: t.name, language: t.lang || undefined, default: !!t.default })) : []
+  }
+
+  /** Index of the showing subtitle track, -1 when off. */
+  get subtitleTrack(): number {
+    return this.hls && this.hls.subtitleDisplay ? this.hls.subtitleTrack : -1
+  }
+
+  /** Show a subtitle track, or pass -1 to turn subtitles off. */
+  setSubtitleTrack(id: number): void {
+    if (!this.hls) return
+    if (id < 0 || id >= this.hls.subtitleTracks.length) {
+      this.hls.subtitleTrack = -1
+      this.hls.subtitleDisplay = false
+    } else {
+      this.hls.subtitleDisplay = true
+      this.hls.subtitleTrack = id
+    }
+    this.onSubtitleTracks()
   }
 
   /** Available levels (matches the most recent `levelparsed` payload). */
@@ -445,6 +471,11 @@ export class HakariPlayer {
     if (sync == null || !Number.isFinite(sync)) return NaN
     const edge = sync + this.liveLatencyConfig.target
     return Math.max(0, edge - this.video.currentTime)
+  }
+
+  private onSubtitleTracks = (): void => {
+    if (!this.hls) return
+    this.emit('subtitletracks', { tracks: this.subtitleTracks, current: this.subtitleTrack })
   }
 
   private onAudioTracks = (): void => {

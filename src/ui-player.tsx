@@ -72,6 +72,8 @@ export interface HakariPlayerControlsToggle {
   mute?: boolean
   /** Quality menu. Default true; auto-hides when only one quality exists. */
   quality?: boolean
+  /** Subtitles (CC) menu. Default true; only shown when the stream lists subtitle tracks. */
+  subtitles?: boolean
   /** Audio-language menu (original + dubbed tracks). Default true; only shown when there is more than one track. */
   audio?: boolean
   /** Fullscreen toggle. Default true. */
@@ -124,6 +126,7 @@ const DEFAULT_CONTROLS: Required<HakariPlayerControlsToggle> = {
   mute: true,
   quality: true,
   audio: true,
+  subtitles: true,
   fullscreen: true,
 }
 
@@ -183,6 +186,9 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
     const [audioTracks, setAudioTracks] = useState<{ id: number; name: string; language?: string }[]>([])
     const [audioTrack, setAudioTrack] = useState(-1)
     const [audioMenuOpen, setAudioMenuOpen] = useState(false)
+    const [subTracks, setSubTracks] = useState<{ id: number; name: string; language?: string }[]>([])
+    const [subTrack, setSubTrack] = useState(-1)
+    const [subMenuOpen, setSubMenuOpen] = useState(false)
     const [idle, setIdle] = useState(false)
     const idleTimer = useRef<number | null>(null)
 
@@ -209,6 +215,10 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
         player.on('audiotracks', (e) => {
           setAudioTracks(e.tracks)
           setAudioTrack(e.current)
+        }),
+        player.on('subtitletracks', (e) => {
+          setSubTracks(e.tracks)
+          setSubTrack(e.current)
         }),
         player.on('qualitychange', (e) => {
           setActiveLevelHeight(e.height)
@@ -311,7 +321,7 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
     // ── derived ───────────────────────────────────────────────────
 
     const ctrl: Required<HakariPlayerControlsToggle> = useMemo(() => {
-      if (controls === false) return { play: false, seek: false, time: false, mute: false, quality: false, audio: false, fullscreen: false }
+      if (controls === false) return { play: false, seek: false, time: false, mute: false, quality: false, audio: false, subtitles: false, fullscreen: false }
       if (controls === true || controls === undefined) return DEFAULT_CONTROLS
       return { ...DEFAULT_CONTROLS, ...controls }
     }, [controls])
@@ -427,6 +437,39 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
             )}
 
             <span className="hakari-spacer" />
+
+            {ctrl.subtitles && subTracks.length > 0 && (
+              <div className="hakari-menu-wrap">
+                <button
+                  className={'hakari-btn hakari-quality-btn' + (subTrack >= 0 ? ' active' : '')}
+                  onClick={() => setSubMenuOpen((v) => !v)}
+                  aria-label="Subtitles"
+                  aria-expanded={subMenuOpen}
+                  title="Subtitles"
+                >
+                  CC
+                </button>
+                {subMenuOpen && (
+                  <div className="hakari-menu" onMouseLeave={() => setSubMenuOpen(false)}>
+                    <button
+                      className={'hakari-menu-item' + (subTrack < 0 ? ' active' : '')}
+                      onClick={() => { playerRef.current?.setSubtitleTrack(-1); setSubMenuOpen(false) }}
+                    >
+                      Off
+                    </button>
+                    {subTracks.map((t) => (
+                      <button
+                        key={t.id}
+                        className={'hakari-menu-item' + (t.id === subTrack ? ' active' : '')}
+                        onClick={() => { playerRef.current?.setSubtitleTrack(t.id); setSubMenuOpen(false) }}
+                      >
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {ctrl.audio && audioTracks.length > 1 && (
               <div className="hakari-menu-wrap">

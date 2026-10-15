@@ -50,6 +50,21 @@ export interface AudioTracksEvent {
   current: number
 }
 
+/** A subtitle rendition from the manifest (TYPE=SUBTITLES). */
+export interface PlayerSubtitleTrack {
+  /** Index to pass to `setSubtitleTrack`. */
+  id: number
+  name: string
+  language?: string
+  default: boolean
+}
+
+export interface SubtitleTracksEvent {
+  tracks: PlayerSubtitleTrack[]
+  /** id of the showing track, or -1 when subtitles are off. */
+  current: number
+}
+
 export interface LevelParsedEvent {
   levels: PlayerLevel[]
 }
@@ -96,6 +111,7 @@ export interface PlayerEventMap {
   levelparsed: LevelParsedEvent
   livesync: LiveSyncEvent
   audiotracks: AudioTracksEvent
+  subtitletracks: SubtitleTracksEvent
 }
 
 export type PlayerEventName = keyof PlayerEventMap
