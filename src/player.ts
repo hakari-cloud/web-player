@@ -1,4 +1,4 @@
-import Hls, { type ErrorData, type ManifestParsedData, type LevelSwitchedData } from 'hls.js'
+import Hls, { type ErrorData, type ManifestParsedData, type ManifestLoadedData, type LevelSwitchedData } from 'hls.js'
 import type {
   ErrorEvent,
   PlayerAudioTrack,
@@ -78,9 +78,12 @@ const DEFAULT_LL_LATENCY = { target: 4, max: 6 }
 const DEFAULT_HLS_LATENCY = { target: 15, max: 20 }
 const LIVE_EDGE_CHECK_MS = 1000
 
+/** Audio-track ids for dubbed languages offered before switching to the delayed dub master. */
+const DUB_ID_BASE = 1000
+
 export class HakariPlayer {
   private readonly video: HTMLVideoElement
-  private readonly opts: HakariPlayerOptions
+  private opts: HakariPlayerOptions
   private hls: Hls | null = null
   private destroyed = false
   private isLive = false
@@ -95,6 +98,12 @@ export class HakariPlayer {
    *  so the next emitted error event can include it without forcing the
    *  caller to dig through hls.js internals. */
   private lastDenyReason: string | undefined
+
+  /** Live dubbing advertised by the low-latency master, and whether this viewer switched to it. */
+  private dubOffer: { langs: Array<{ lang: string; label: string }>; master: string; delaySec: number } | null = null
+  private dubMode = false
+  private pendingDubLang: string | null = null
+  private liveSrc: string | null = null
 
   constructor(video: HTMLVideoElement, opts: HakariPlayerOptions) {
     if (!video || !(video instanceof HTMLVideoElement)) {
@@ -210,6 +219,12 @@ export class HakariPlayer {
       return
     }
 
+    this.startHls(src, withCreds)
+    this.bindNativeEvents(/* native: */ false)
+  }
+
+  /** Create the hls.js instance for `src` (also used to switch to the delayed dub master and back). */
+  private startHls(src: string, withCreds: boolean): void {
     const lowLatency = this.opts.lowLatency !== false
     const latency = this.opts.liveLatency
       || (lowLatency ? DEFAULT_LL_LATENCY : DEFAULT_HLS_LATENCY)
@@ -237,13 +252,13 @@ export class HakariPlayer {
     hls.on(Hls.Events.LEVEL_SWITCHED, this.onLevelSwitched)
     hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, this.onAudioTracks)
     hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, this.onAudioTracks)
+    hls.on(Hls.Events.MANIFEST_LOADED, this.onManifestLoaded)
     hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, this.onSubtitleTracks)
     hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, this.onSubtitleTracks)
     hls.on(Hls.Events.ERROR, this.onHlsError)
 
     hls.loadSource(src)
     hls.attachMedia(this.video)
-    this.bindNativeEvents(/* native: */ false)
   }
 
   private bindNativeEvents(_native: boolean): void {
@@ -299,19 +314,90 @@ export class HakariPlayer {
     if (idx >= 0) this.hls.currentLevel = idx
   }
 
-  /** Audio renditions: the original soundtrack plus any dubbed languages. */
+  /** Audio renditions: the original soundtrack plus any dubbed languages.
+   *  On a live stream with live dubbing, the dubbed languages are listed too
+   *  (ids from DUB_ID_BASE): picking one moves this viewer to the stream's
+   *  delayed dub master (~a minute behind live), and picking Original there
+   *  returns to low-latency live. */
   get audioTracks(): PlayerAudioTrack[] {
-    return this.hls ? this.hls.audioTracks.map((t, i) => ({ id: i, name: t.name, language: t.lang || undefined, default: !!t.default })) : []
+    if (!this.hls) return []
+    const real = this.hls.audioTracks.map((t, i) => ({ id: i, name: t.name, language: t.lang || undefined, default: !!t.default }))
+    if (this.dubMode || !this.dubOffer) return real
+    const original = real.length ? real.slice(0, 1).map((t) => ({ ...t, name: 'Original' })) : [{ id: 0, name: 'Original', language: undefined, default: true }]
+    return [...original, ...this.dubOffer.langs.map((d, i) => ({ id: DUB_ID_BASE + i, name: d.label, language: d.lang, default: false }))]
   }
 
   /** Index of the playing audio track (-1 before the manifest loads). */
   get audioTrack(): number {
-    return this.hls ? this.hls.audioTrack : -1
+    if (!this.hls) return -1
+    return this.dubOffer && !this.dubMode ? 0 : this.hls.audioTrack
   }
 
   /** Switch to another audio rendition (e.g. a dubbed language). */
   setAudioTrack(id: number): void {
-    if (this.hls && id >= 0 && id < this.hls.audioTracks.length) this.hls.audioTrack = id
+    if (!this.hls) return
+    if (this.dubOffer && !this.dubMode && id >= DUB_ID_BASE) {
+      const d = this.dubOffer.langs[id - DUB_ID_BASE]
+      if (d) this.switchToDub(d.lang)
+      return
+    }
+    if (this.dubMode && this.liveSrc) {
+      const t = this.hls.audioTracks[id]
+      if (t && !t.lang?.length && /original/i.test(t.name)) {
+        // Back to low-latency live with the original audio.
+        this.switchSource(this.liveSrc, false, null)
+        return
+      }
+    }
+    if (id >= 0 && id < this.hls.audioTracks.length) this.hls.audioTrack = id
+  }
+
+  /** Delayed live dub offered by the manifest (EXT-X-SESSION-DATA), if any. */
+  get liveDub(): { languages: Array<{ lang: string; label: string }>; delaySec: number; active: boolean } | null {
+    return this.dubOffer ? { languages: this.dubOffer.langs, delaySec: this.dubOffer.delaySec, active: this.dubMode } : null
+  }
+
+  private switchToDub(lang: string): void {
+    if (!this.dubOffer) return
+    const src = this.opts.src
+    const dubSrc = src.replace(/[^/?#]+(\?[^#]*)?$/, (_m, q) => `${this.dubOffer!.master}${q || ''}`)
+    this.liveSrc = this.liveSrc || src
+    this.switchSource(dubSrc, true, lang)
+  }
+
+  private switchSource(src: string, dub: boolean, lang: string | null): void {
+    if (this.destroyed) return
+    const wasPlaying = !this.video.paused
+    if (this.liveEdgeTimer) {
+      clearInterval(this.liveEdgeTimer)
+      this.liveEdgeTimer = null
+    }
+    if (this.hls) {
+      try { this.hls.destroy() } catch { /* ignore */ }
+      this.hls = null
+    }
+    this.opts = { ...this.opts, src }
+    this.dubMode = dub
+    this.pendingDubLang = lang
+    if (!dub) this.liveSrc = null
+    this.startHls(src, this.opts.withCredentials !== false)
+    if (wasPlaying) void this.video.play().catch(() => {})
+    this.onAudioTracks()
+  }
+
+  private onManifestLoaded = (_evt: unknown, data: ManifestLoadedData): void => {
+    const sd = (data?.sessionData || {}) as unknown as Record<string, { VALUE?: string }>
+    const offer = sd['cloud.hakari.dub']?.VALUE
+    if (offer && !this.dubMode) {
+      const langs = offer.split('|').map((p) => {
+        const i = p.indexOf(':')
+        return { lang: i > 0 ? p.slice(0, i) : p, label: i > 0 ? p.slice(i + 1) : p }
+      }).filter((d) => /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(d.lang))
+      const master = sd['cloud.hakari.dub.master']?.VALUE || 'llhls-dub.m3u8'
+      this.dubOffer = langs.length && /^[A-Za-z0-9_.-]+\.m3u8$/.test(master)
+        ? { langs, master, delaySec: Number(sd['cloud.hakari.dub.delay']?.VALUE) || 60 }
+        : null
+    }
   }
 
   /** Subtitle renditions listed in the manifest (live captions, VOD subtitle tracks). */
@@ -480,6 +566,14 @@ export class HakariPlayer {
 
   private onAudioTracks = (): void => {
     if (!this.hls) return
+    if (this.dubMode && this.pendingDubLang && this.hls.audioTracks.length) {
+      const idx = this.hls.audioTracks.findIndex((t) => t.lang === this.pendingDubLang)
+      this.pendingDubLang = null
+      if (idx >= 0 && this.hls.audioTrack !== idx) {
+        this.hls.audioTrack = idx
+        return // AUDIO_TRACK_SWITCHED re-emits
+      }
+    }
     this.emit('audiotracks', { tracks: this.audioTracks, current: this.hls.audioTrack })
   }
 

@@ -489,8 +489,9 @@ export const HakariPlayerUI = forwardRef<HakariPlayerHandle, HakariPlayerProps>(
                         key={t.id}
                         className={'hakari-menu-item' + (t.id === audioTrack ? ' active' : '')}
                         onClick={() => { playerRef.current?.setAudioTrack(t.id); setAudioMenuOpen(false) }}
+                        title={t.id >= 1000 ? 'Dubbed live: plays about a minute behind' : undefined}
                       >
-                        {t.name}
+                        {t.name}{t.id >= 1000 ? ' · ~1 min behind' : ''}
                       </button>
                     ))}
                   </div>
